@@ -1,0 +1,53 @@
+<?php
+
+require __DIR__ . '/vendor/autoload.php';
+
+use Illuminate\Http\Request;
+use Illuminate\Routing\Router;
+use Illuminate\Events\Dispatcher;
+use Illuminate\Routing\Redirector;
+use Illuminate\Routing\UrlGenerator;
+use Illuminate\Container\Container;
+use Illuminate\Console\Application;
+use Illuminate\Database\Capsule\Manager as DB;
+use Symfony\Component\Dotenv\Dotenv;
+
+/** Env */
+(new Dotenv())->bootEnv(__DIR__ . '/.env');
+
+/** Application */
+$container = new Container;
+$events    = new Dispatcher($container);
+$artisan   = new Application($container, $events, 'Version 1');
+
+/** Router */
+$request = Request::capture();
+$container->instance('Illuminate\Http\Request', $request);
+$router = new Router($events, $container);
+
+require_once 'routes.php';
+
+if (empty($argv)) {
+    $config = require_once 'src/_config/database_laptrinhphp.php';
+
+    /** Connect DB */
+    $db = new DB;
+    $db->addConnection($config);
+    $db->setAsGlobal();
+    $db->bootEloquent();
+
+    $redirect = new Redirector(new UrlGenerator($router->getRoutes(), $request));
+    $response = $router->dispatch($request);
+    $response->send();
+} else {
+    $commands = array();
+    foreach (glob('src/Commands/*') as $class) {
+        $namespace  = '\Scaleflex\LapTrinhPhp\Commands\\';
+        $classinfo  = pathinfo($class);
+        $commands[] = $namespace . $classinfo["filename"];
+    }
+
+    $artisan->resolveCommands($commands);
+
+    $artisan->run();
+}
